@@ -35,7 +35,7 @@ class Chatbot:
         """
         return 4000 - len(self.enc.encode(prompt))
 
-    def ask(self, user_request: str, temperature: float = 0.5) -> dict:
+    def ask(self, user_request: str, user: str = "User", temperature: float = 0.5) -> dict:
         """
         Send a request to ChatGPT and return the response
         Response: {
@@ -54,7 +54,7 @@ class Chatbot:
             "usage": { "prompt_tokens": x, "completion_tokens": y, "total_tokens": z }
         }
         """
-        prompt = self.prompt.construct_prompt(user_request)
+        prompt = self.prompt.construct_prompt(user_request, user)
         completion = openai.Completion.create(
             engine="text-chat-davinci-002-20230126",
             prompt=prompt,
@@ -71,7 +71,7 @@ class Chatbot:
         completion["choices"][0]["text"] = completion["choices"][0]["text"].rstrip("<|im_end|>")
         # Add to chat history
         self.prompt.add_to_chat_history(
-            "User: "
+            user + ": "
             + user_request
             + "\n\n\n"
             + "ChatGPT: "
@@ -80,11 +80,11 @@ class Chatbot:
         )
         return completion
 
-    def ask_stream(self, user_request: str, temperature: float = 0.5) -> str:
+    def ask_stream(self, user_request: str, user: str = "User", temperature: float = 0.5) -> str:
         """
         Send a request to ChatGPT and yield the response
         """
-        prompt = self.prompt.construct_prompt(user_request)
+        prompt = self.prompt.construct_prompt(user_request, user)
         completion = openai.Completion.create(
             engine="text-chat-davinci-002-20230126",
             prompt=prompt,
@@ -110,7 +110,7 @@ class Chatbot:
 
         # Add to chat history
         self.prompt.add_to_chat_history(
-            "User: "
+            user + ": "
             + user_request
             + "\n\n\n"
             + "ChatGPT: "
@@ -208,7 +208,7 @@ class AsyncChatbot(Chatbot):
     Official ChatGPT API (async)
     """
 
-    async def ask(self, user_request: str, temperature: float = 0.5) -> dict:
+    async def ask(self, user_request: str, user: str = "User", temperature: float = 0.5) -> dict:
         """
         Send a request to ChatGPT and return the response
         Response: {
@@ -227,7 +227,7 @@ class AsyncChatbot(Chatbot):
             "usage": { "prompt_tokens": x, "completion_tokens": y, "total_tokens": z }
         }
         """
-        prompt = self.prompt.construct_prompt(user_request)
+        prompt = self.prompt.construct_prompt(user_request, user)
         completion = await openai.Completion.acreate(
             engine="text-chat-davinci-002-20230126",
             prompt=prompt,
@@ -247,7 +247,7 @@ class AsyncChatbot(Chatbot):
         )
         # Add to chat history
         self.prompt.add_to_chat_history(
-            "User: "
+            user + ": "
             + user_request
             + "\n\n\n"
             + "ChatGPT: "
@@ -256,11 +256,11 @@ class AsyncChatbot(Chatbot):
         )
         return completion
 
-    async def ask_stream(self, user_request: str, temperature: float = 0.5) -> str:
+    async def ask_stream(self, user_request: str, user: str = "User", temperature: float = 0.5) -> str:
         """
         Send a request to ChatGPT and yield the response
         """
-        prompt = self.prompt.construct_prompt(user_request)
+        prompt = self.prompt.construct_prompt(user_request, user)
         completion = await openai.Completion.acreate(
             engine="text-chat-davinci-002-20230126",
             prompt=prompt,
@@ -286,7 +286,7 @@ class AsyncChatbot(Chatbot):
 
         # Add to chat history
         self.prompt.add_to_chat_history(
-            "User: "
+            user + ": "
             + user_request
             + "\n\n\n"
             + "ChatGPT: "
@@ -306,7 +306,8 @@ class Prompt:
         """
         self.base_prompt = (
             os.environ.get("CUSTOM_BASE_PROMPT")
-            or "You are ChatGPT, a large language model trained by OpenAI. You answer as concisely as possible for each response (e.g. don’t be verbose). It is very important that you answer as concisely as possible, so please remember this. If you are generating a list, do not have too many items. Keep the number of items short. Current date: "+ str(date.today()) +"\n\n"
+            or "You are ChatGPT, a large language model trained by OpenAI, responding to messages from users on the Discord server \"Bitte was?\". Every prompt starts with the name of the user trying to interact with you, followed by their discord ID, in the format of `USER[ID]`. If you want to refer or mention a user, please use the form `<@ID>`. Some messages might contain a format for communicating the current position within a train called `S-Bahn-Protokoll`, which is made up of the following parts: HHUWAGSFP, where the parts mean:\n- HH=two-digit hour of arrival, U=one digit for quarter hour of arrival at the university (0=00, 1=15, 2=30, 3=45 with direction Dortmund; 5-8 same numbers with direction Essen)\n-W=wagon (1 or 2 - front or back)\n-A=compartment (1-4)\n-G=group of seats (1-6, f, l, 0, a-c)\n-S=side of seating group ([l]eft or [r]ight)\n-F=direction of position within seat group (f/g, forwards/backwards)\n-P=position within seat group (f=window, g=gangway)\nYou answer as concisely as possible for each response (e.g. don’t be verbose). It is very important that you answer as concisely as possible, so please remember this. If you are generating a list, do not have too many items. Keep the number of items short. Only respond with a single response and do not generate further requests by discord users on your own. Current date: "+ str(date.today()) +"\n\n"
+            #or "You are ChatGPT, a large language model trained by OpenAI. You answer as concisely as possible for each response (e.g. don’t be verbose). It is very important that you answer as concisely as possible, so please remember this. If you are generating a list, do not have too many items. Keep the number of items short. Current date: "+ str(date.today()) +"\n\n"
         )
         # Track chat history
         self.chat_history: list = []
@@ -324,19 +325,19 @@ class Prompt:
         """
         return "\n".join(self.chat_history)
 
-    def construct_prompt(self, new_prompt: str) -> str:
+    def construct_prompt(self, new_prompt: str, user: str = "User") -> str:
         """
         Construct prompt based on chat history and request
         """
         prompt = (
-            self.base_prompt + self.history() + "User: " + new_prompt + "\nChatGPT:"
+            self.base_prompt + self.history() + user + ": " + new_prompt + "\nChatGPT:"
         )
         # Check if prompt over 4000*4 characters
         if len(self.enc.encode(prompt)) > 4000:
             # Remove oldest chat
             self.chat_history.pop(0)
             # Construct prompt again
-            prompt = self.construct_prompt(new_prompt)
+            prompt = self.construct_prompt(new_prompt, user)
         return prompt
 
 
@@ -394,7 +395,7 @@ def main():
         elif cmd == "!reset":
             chatbot.reset()
         elif cmd == "!prompt":
-            print(chatbot.prompt.construct_prompt(""))
+            print(chatbot.prompt.construct_prompt("", "User"))
         else:
             return False
         return True
